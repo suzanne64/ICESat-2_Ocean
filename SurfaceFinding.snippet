@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+    <CodeSnippet Format="1.0.0">
+        <Header>
+            <Title>ATL12 Surface Finding code snippet</Title>
+        </Header>
+        <Snippet>
+            <Code Language="TypeScript">
+                <![CDATA[% Surface finding is accomplished using dynamic ocean topography (dot).
+%  dot is computed by subtracting the geoid from the measured elevation, as
+%    well as removing the dynamic atmospheric correction and the ocean tides.
+
+% collect data from 14 sequential 20m ATL03 segments
+      for gg=1:14  
+        index=gg+g-1;
+        if index==1
+          elevg=cat(1,elevg,elev_all(1:seg_ph_cnt_all(index)));
+          dotg=cat(1,dotg,elev_all(1:seg_ph_cnt_all(index)) - geoid_all(index) - dac_all(index) - tide_ocean_all(index));
+          timeg=cat(1,timeg,time_all(1:seg_ph_cnt_all(index)));
+          latg=cat(1,latg,lat_all(1:seg_ph_cnt_all(index)));
+          long=cat(1,long,lon_all(1:seg_ph_cnt_all(index)));
+          trackdistg = cat(1,trackdistg,dist_ph_along_all(1:seg_ph_cnt_all(index)) + seg_dist_x_all(index));
+          quality_phg=cat(1,quality_phg,quality_ph_all(1:seg_ph_cnt_all(index)));
+          signal_conf_phg=cat(1,signal_conf_phg,signal_conf_ph_all(1:seg_ph_cnt_all(index)));
+        elseif index<=length(geoid_all) 
+          if ~isnan(seg_ph_cnt_all(index))
+            elevg=cat(1,elevg,elev_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)));
+            dotg=cat(1,dotg,elev_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)) - geoid_all(index) - dac_all(index) - tide_ocean_all(index));
+            timeg=cat(1,timeg,time_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)));
+            latg=cat(1,latg,lat_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)));
+            long=cat(1,long,lon_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)));
+            trackdistg = cat(1,trackdistg,dist_ph_along_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)) + seg_dist_x_all(index));
+            quality_phg=cat(1,quality_phg,quality_ph_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)));
+            signal_conf_phg=cat(1,signal_conf_phg,signal_conf_ph_all(sum(seg_ph_cnt_all(1:index-1))+1:sum(seg_ph_cnt_all(1:index-1))+seg_ph_cnt_all(index)));
+          end
+%         else
+%            break
+        end
+        podppd_flagg        = cat(1,podppd_flagg,repmat(podppd_flag_all(index),              [seg_ph_cnt_all(index),1]));
+        geoidg        = cat(1,geoidg,repmat(geoid_all(index),              [seg_ph_cnt_all(index),1]));
+        dacg          = cat(1,dacg,repmat(dac_all(index),                  [seg_ph_cnt_all(index),1]));
+        tide_earthg   = cat(1,tide_earthg,repmat(tide_earth_all(index),    [seg_ph_cnt_all(index),1]));
+        tide_loadg    = cat(1,tide_loadg,repmat(tide_load_all(index),      [seg_ph_cnt_all(index),1]));
+        tide_oc_poleg = cat(1,tide_oc_poleg,repmat(tide_oc_pole_all(index),[seg_ph_cnt_all(index),1]));
+        tide_oceang   = cat(1,tide_oceang,repmat(tide_ocean_all(index),    [seg_ph_cnt_all(index),1]));
+        tide_poleg    = cat(1,tide_poleg,repmat(tide_pole_all(index),      [seg_ph_cnt_all(index),1]));
+        bath_geoseg   = interp2(gebcoLon(indlo),gebcoLat(indla),gebcoDepth,ref_lon_all(index),ref_lat_all(index));
+        bathyg        = cat(1,bathyg,repmat(bath_geoseg,                   [seg_ph_cnt_all(index),1]));
+      end  % gg loop
+
+      % require that all data are below 10m ocean depth (from GEBCO_2019.nc) and have the best quality
+      if ~any(bathymetry>-10) && ~any(podppd_flagg>0)
+      % Convert to ± 15-m window and require signal confidence flag is at
+      % least one and photon quality flag is zero
+        jatlas=find(dotg>=-15 & dotg<=15 & signal_conf_phg>=1 & quality_phg==0);
+      %  NoiseGTE08 = cat(1,NoiseGTE08,length(find(dotg>=-15 & dotg<=15 & signal_conf_phg>=0 & quality_phg==0)));
+
+        if length(jatlas) >= 20
+          % ---Compute Initial Histogram
+          [n,~,bin]=histcounts(dotg(jatlas),-15.005:0.01:15.005); % bin size = 1cm
+         
+          % --- Find median number of counts initial histogram bins
+          medianN=median(n);
+          j=find(n > medianN);
+  
+          % keep count of the number of signal photons and 
+          %   the number of 280m lengths.
+          if ~isempty(j)
+            num_signal(s8) = num_signal(s8) + sum(n(j));
+          end
+          num_280msegs(s8) = num_280msegs(s8) + 1;
+
+          dot8 = cat(1,dot8,dotg);  
+          time8 = cat(1,time8,timeg);
+          lat8 = cat(1,lat8,latg);
+          lon8 = cat(1,lon8,long);
+          trackdist8 = cat(1,trackdist8,trackdistg);
+          quality_ph8 = cat(1,quality_ph8,quality_phg);
+          signal_conf_ph8 = cat(1,signal_conf_ph8,signal_conf_phg);
+    
+          geoid8              = cat(1,geoid8,geoidg);
+          dac8                = cat(1,dac8,dacg);      
+          tide_earth8         = cat(1,tide_earth8,tide_earthg);
+          tide_load8          = cat(1,tide_load8,tide_loadg);
+          tide_oc_pole8       = cat(1,tide_oc_pole8,tide_oc_poleg);
+          tide_ocean8         = cat(1,tide_ocean8,tide_oceang);
+          tide_pole8          = cat(1,tide_pole8,tide_poleg);
+          bathy8              = cat(1,bathy8,bathyg);
+        else
+          num_280msegs(s8) = num_280msegs(s8) + 1;
+        end
+      end % deeper than 10m
+      
+      if num_signal(s8)>=8000 || num_280msegs(s8)>=25 || (g+14)>length(seg_id_all)
+        % if we have enough photons for an ocean segment, or enough 280m lengths, stop collecting
+        if num_signal(s8) < 4000
+          % if number of signal photons is less than 4000, even though we've collected 280m lengths, 
+          % reset variables and start collecting again
+        end
+        n_ttl_photon(s8) = length(dot8);
+        NoiseGTE0(s8) = sum(NoiseGTE08);
+        trackdist0 = trackdist8(1);
+        
+        jatlas = find(dot8>=-15 & dot8<=15 & signal_conf_ph8>=sigconf0 & quality_ph8==0);
+        dot8 = dot8(jatlas);
+        time8 = time8(jatlas);
+        lat8 = lat8(jatlas);
+        lon8 = lon8(jatlas);
+        trackdist8 = trackdist8(jatlas);
+        quality_ph8 = quality_ph8(jatlas);
+        signal_conf_ph8 = signal_conf_ph8(jatlas);
+    
+        geoid8              = geoid8(jatlas);
+        dac8                = dac8(jatlas);     
+        tide_earth8         = tide_earth8(jatlas);
+        tide_load8          = tide_load8(jatlas);
+        tide_oc_pole8       = tide_oc_pole8(jatlas);
+        tide_ocean8         = tide_ocean8(jatlas);
+        tide_pole8          = tide_pole8(jatlas);
+        bathy8              = bathy8(jatlas);
+
+        if ~any(signal_conf_ph8==4)
+          continue
+        else
+        y11 = mvnbnvg_cnditnl(dot8,signal_conf_ph8,conf_lim,11);        
+        [n,~,bin]=histcounts(dot8-y11,edges);
+        n=n(:);
+        lengthbin=length(bin);
+        lengthn=length(n);
+        lengthedges=length(edges);
+
+      % --- Find median number of counts initial histogram bins 
+        medianN=median(n);
+      % --- choose signal photons as those in bins where n>=A*median of n
+      % --- and noise as those in bins where n<A*median, A=3, but could be TBD
+      % --- compute center points of bins
+%         j=find(n>=A*medianN);
+%         jnoise=find(n<A*medianN);
+
+      % -- Smooth the initial histogram with boxcar smoother over 20 bins
+      nbin=20;
+      smoothn=mvnbnvg(n,nbin+1,1);
+      Lsmth=length(smoothn);
+      smoothn=[smoothn(1)*ones(nbin/2,1);smoothn(:);smoothn(Lsmth)*ones(nbin/2,1)];
+      Lsmth=length(smoothn);
+      medianSm=median(smoothn);
+
+     % ----------
+     % --- find limits of valid histogram above (jlow)and below (jhigh)
+     % --- max 1-m smoothed n where  n > global median
+     imax=find(smoothn==max(smoothn));
+     imax=round(mean(imax));
+
+        if medianN>0
+          i=imax;while n(i)>=A*medianN,i=i-1;end,jlow=i; 
+          i=imax;while n(i)>=A*medianN,i=i+1;end,jhigh=i;
+        else
+          i=imax;while n(i)>A*medianN,i=i-1;end,jlow=i; 
+          i=imax;while n(i)>A*medianN,i=i+1;end,jhigh=i;
+        end
+        lowtailnoise=std(n(1:jlow));
+        hightailnoise=std(n(jhigh:end));
+        meanlowtailnoise=mean(n(1:jlow));
+        meanhightailnoise=mean(n(jhigh:end));
+        if meanlowtailnoise>0
+          i=imax;while smoothn(i)>=A*meanlowtailnoise,i=i-1;end,jlow=i; 
+        else
+          i=imax;while smoothn(i)>A*meanlowtailnoise,i=i-1;end,jlow=i; 
+        end
+        if meanhightailnoise>0
+          i=imax;while smoothn(i)>=A*meanhightailnoise,i=i+1;end,jhigh=i;
+        else
+          i=imax;while smoothn(i)>A*meanhightailnoise,i=i+1;end,jhigh=i;
+        end
+        ii1=find(bin>=jlow & bin<=jhigh);
+
+      % --- Compute statistics of the "ChosenPhotons" (dot_initial(ii)) <-                                                                                                                                        
+      % between jlow and jhigh                                                                                                                                                                                    
+        meanelev1(s8)=mean(dot8(ii1));                                                                                                                                                                       
+        stdelev1(s8)=std(dot8(ii1));                                                                                                                                                                          
+        skewelev1(s8)=skewness(dot8(ii1));                                                                                                                                                                     
+        kurtosiselev1(s8)=kurtosis(dot8(ii1));
+        timeSSH1(s8)=mean(time8(ii1));
+        distSSH1(s8)=mean(trackdist8(ii1));
+        %timeSSHall(s8)=mean(time8);  different from timeSSH by hundredths of a minute
+    
+        ppoly1 = polyfit(trackdist8(ii1) - trackdist0, dot8(ii1),1);
+        p1(s8) = ppoly1(1);
+        p0(s8) = ppoly1(2);
+        
+        elevfit=polyval(ppoly1,trackdist8 - trackdist0);
+        dot2=dot8-elevfit;
+
+        meanoffit(s8)=mean(elevfit);
+        y112 = mvnbnvg_cnditnl(dot2,signal_conf_ph8,conf_lim,11);
+        [n,~,bin]=histcounts(dot2-y112,edges);
+        %[n,~,bin]=histcounts(dot2,edges);
+        n=n(:); % anomalies
+
+        medianN=median(n);
+        Nmedian(s8) = medianN;        
+        Ln=length(n);
+        j=find(n>A*medianN);
+        jnoise=find(n<=A*medianN);
+        sigphotonsGTAmedians=mean(n(j));
+        noisephotonsLTAmedians=mean(n(jnoise));
+
+        smoothn=mvnbnvg(n,nbin+1,1);
+        Lsmth=length(smoothn);
+        smoothn=[smoothn(1)*ones(nbin/2,1);smoothn(:);smoothn(Lsmth)*ones(nbin/2,1)];
+        Lsmth=length(smoothn);
+        medianSm=median(smoothn);
+
+        imax=find(smoothn==max(smoothn));
+        imax=round(mean(imax));  % in case there are more than 1
+        % 27 may 2019 change
+        if medianN>0
+          i=imax;while n(i)>=A*medianN,i=i-1;end,jlow=i; 
+          i=imax;while n(i)>=A*medianN,i=i+1;end,jhigh=i;
+        else
+          i=imax;while n(i)>A*medianN,i=i-1;end,jlow=i; 
+          i=imax;while n(i)>A*medianN,i=i+1;end,jhigh=i;
+        end
+        
+        lowtailnoise=std(n(1:jlow));
+        meanlowtailnoise=mean(n(1:jlow));
+        hightailnoise=std(n(jhigh:end));
+        meanhightailnoise=mean(n(jhigh:end));
+        if meanlowtailnoise>0
+          i=imax;while smoothn(i)>=A*meanlowtailnoise,i=i-1;end,jlow=i; 
+        else
+          i=imax;while smoothn(i)>A*meanlowtailnoise,i=i-1;end,jlow=i; 
+        end
+        if meanhightailnoise>0
+          i=imax;while smoothn(i)>=A*meanhightailnoise,i=i+1;end,jhigh=i;
+        else
+          i=imax;while smoothn(i)>A*meanhightailnoise,i=i+1;end,jhigh=i;
+        end
+        meansigphotonsGTAmedians=mean(n(jlow:jhigh));
+        noisephotonsLT1median=mean([n(1:jlow,1);n(jhigh:Ln,1)]);
+
+    %%% Second selection of surface photons
+    % --- Find elevations of photons in the time series (location index vector ii)
+    % --- that went into the good bins between jlow and jhigh
+        ii2=find(bin>=jlow & bin<=jhigh);
+        dot2(ii2)
+        end
+      end
+]]>
+            </Code>
+        </Snippet>
+    </CodeSnippet>
+</CodeSnippets>
